@@ -689,7 +689,7 @@ export default function App() {
         const isInt = !!taskInternal[t.key];
         const taskLogs = (logs[t.key] || []).filter(n => isRaiz || !n.internal);
         const notesHtml = taskLogs.length ? `<div style="margin-top:8px;padding-left:12px;border-left:2px solid #e5e7eb">${
-          taskLogs.map(n => `<div style="margin-bottom:5px">${isRaiz && n.internal ? '<span style="font-size:10px;color:#1a2744;margin-right:4px">🔒</span>' : ''}<span style="font-size:12px;color:#4a4a4a">${n.text}</span><span style="font-size:10px;color:#8a8a8a;margin-left:6px">${n.author_name ? `— ${n.author_name} · ` : ''}${fmtTs(n.created_at)}</span></div>`).join('')
+          taskLogs.map(n => `<div style="margin-bottom:5px">${isRaiz && n.internal ? '<span style="font-size:10px;color:#1a2744;margin-right:4px">🔒</span>' : ''}<span style="font-size:12px;color:#4a4a4a">${n.text}</span><span style="font-size:10px;color:#8a8a8a;margin-left:6px">${n.author ? `— ${n.author} · ` : ''}${fmtTs(n.ts)}</span></div>`).join('')
         }</div>` : '';
         return `<tr style="border-bottom:1px solid #f3f4f6"><td style="padding:10px 8px;vertical-align:top"><div style="font-size:13px;font-weight:500;color:#1c1c1e">${t.label}${isInt && isRaiz ? '<span style="font-size:10px;background:#e0e7ff;color:#1a2744;padding:1px 8px;border-radius:99px;font-weight:600;margin-left:6px">Internal</span>' : ''}${t.hidden && isRaiz ? '<span style="font-size:10px;background:#f3f4f6;color:#8a8a8a;padding:1px 8px;border-radius:99px;font-weight:600;margin-left:6px">Hidden</span>' : ''}</div>${notesHtml}</td><td style="padding:10px 8px;white-space:nowrap;vertical-align:top">${sBadge(getSt(t.key))}</td></tr>`;
       }).join('');
