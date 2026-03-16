@@ -1222,7 +1222,7 @@ ${phaseSections}${notesHtml}${linksHtml}</body></html>`;
         <div style={{maxWidth:1000,margin:"0 auto",display:"flex",flexDirection:"column",gap:12}}>
 
           {/* Raiz: invite client */}
-          {isRaiz && (
+          {!isClientUser && (
             <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
               <span style={{fontSize:12,fontWeight:600,color:TMID,minWidth:100}}>Invite client</span>
               {inviteStatus==="sent"
@@ -1242,7 +1242,7 @@ ${phaseSections}${notesHtml}${linksHtml}</body></html>`;
           )}
 
           {/* Raiz: add client manually */}
-          {isRaiz && (
+          {!isClientUser && (
             <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
               <span style={{fontSize:12,fontWeight:600,color:TMID,minWidth:100}}>Add client</span>
               {addStatus==="saved"
