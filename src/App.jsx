@@ -177,7 +177,9 @@ import logoSrc from './assets/Raiz-Logo.png';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 function fmtTs(isoStr) {
-  const d   = new Date(isoStr);
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  if (isNaN(d.getTime())) return '';
   const now = new Date();
   const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   if (d.toDateString() === now.toDateString()) return `Today · ${time}`;
