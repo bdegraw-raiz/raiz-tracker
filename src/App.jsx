@@ -346,6 +346,10 @@ export default function App() {
   const [newPassword,     setNewPassword]     = useState("");
   const [pwStatus,        setPwStatus]        = useState(null); // null | "saving" | "saved" | "error"
   const [pwError,         setPwError]         = useState("");
+  const [addEmail,        setAddEmail]        = useState("");
+  const [addPassword,     setAddPassword]     = useState("");
+  const [addStatus,       setAddStatus]       = useState(null); // null | "saving" | "saved" | "error"
+  const [addError,        setAddError]        = useState("");
 
   const saveTimer     = useRef(null);
   const memberTimer   = useRef(null);
@@ -648,6 +652,24 @@ export default function App() {
     } else {
       setInviteStatus("sent");
       setInviteEmail("");
+    }
+  };
+
+  const createClient = async () => {
+    const email = addEmail.trim();
+    if (!email || !addPassword) return;
+    setAddStatus("saving");
+    setAddError("");
+    const { error } = await supabase.functions.invoke('invite-client', {
+      body: { email, password: addPassword, engagement_id: engagementId, mode: "create" },
+    });
+    if (error) {
+      setAddStatus("error");
+      setAddError(error.message || "Failed to create client");
+    } else {
+      setAddStatus("saved");
+      setAddEmail("");
+      setAddPassword("");
     }
   };
 
@@ -1214,6 +1236,28 @@ ${phaseSections}${notesHtml}${linksHtml}</body></html>`;
                       {inviteStatus==="sending"?"Sending…":"Send invite"}
                     </button>
                     {inviteStatus==="error" && <span style={{fontSize:11,color:"#dc2626"}}>{inviteError}</span>}
+                  </div>
+              }
+            </div>
+          )}
+
+          {/* Raiz: add client manually */}
+          {isRaiz && (
+            <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+              <span style={{fontSize:12,fontWeight:600,color:TMID,minWidth:100}}>Add client</span>
+              {addStatus==="saved"
+                ? <span style={{fontSize:12,color:"#059669",fontWeight:600}}>Client added ✓</span>
+                : <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                    <input value={addEmail} onChange={e=>setAddEmail(e.target.value)}
+                      type="email" placeholder="Client email" style={{...iSt,width:200,fontSize:12}}/>
+                    <input value={addPassword} onChange={e=>setAddPassword(e.target.value)}
+                      onKeyDown={e=>e.key==="Enter"&&createClient()}
+                      type="text" placeholder="Temp password" style={{...iSt,width:150,fontSize:12}}/>
+                    <button onClick={createClient} disabled={addStatus==="saving"||!addEmail||!addPassword}
+                      style={{background:NAVY,border:"none",borderRadius:6,padding:"6px 16px",color:"#fff",fontWeight:600,fontSize:12,cursor:addStatus==="saving"||!addEmail||!addPassword?"default":"pointer",opacity:addStatus==="saving"||!addEmail||!addPassword?0.6:1}}>
+                      {addStatus==="saving"?"Adding…":"Add client"}
+                    </button>
+                    {addStatus==="error" && <span style={{fontSize:11,color:"#dc2626"}}>{addError}</span>}
                   </div>
               }
             </div>

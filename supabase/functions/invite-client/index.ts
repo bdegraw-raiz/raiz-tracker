@@ -25,7 +25,7 @@ Deno.serve(async (req) => {
     return new Response("Forbidden", { status: 403, headers: corsHeaders });
   }
 
-  const { email, engagement_id, redirect_url } = await req.json();
+  const { email, engagement_id, redirect_url, mode, password } = await req.json();
   if (!email || !engagement_id) {
     return new Response(
       JSON.stringify({ error: "email and engagement_id are required" }),
@@ -33,16 +33,38 @@ Deno.serve(async (req) => {
     );
   }
 
-  const { error: inviteErr } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-    data: { role: "client", engagement_id, full_name: "" },
-    redirectTo: redirect_url,
-  });
-
-  if (inviteErr) {
-    return new Response(
-      JSON.stringify({ error: inviteErr.message }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+  if (mode === "create") {
+    // Create user with password — no email sent
+    if (!password) {
+      return new Response(
+        JSON.stringify({ error: "password is required for create mode" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    const { error: createErr } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      user_metadata: { role: "client", engagement_id, full_name: "" },
+      email_confirm: true,
+    });
+    if (createErr) {
+      return new Response(
+        JSON.stringify({ error: createErr.message }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+  } else {
+    // Invite flow — sends magic link email
+    const { error: inviteErr } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+      data: { role: "client", engagement_id, full_name: "" },
+      redirectTo: redirect_url,
+    });
+    if (inviteErr) {
+      return new Response(
+        JSON.stringify({ error: inviteErr.message }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
   }
 
   return new Response(
