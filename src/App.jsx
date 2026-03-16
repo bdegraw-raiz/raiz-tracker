@@ -339,10 +339,13 @@ export default function App() {
   const [editTaskLabel, setEditTaskLabel] = useState("");
   const [addTaskPhase,  setAddTaskPhase]  = useState(null);
   const [addTaskLabel,  setAddTaskLabel]  = useState("");
-  const [showInvite,    setShowInvite]    = useState(false);
-  const [inviteEmail,   setInviteEmail]   = useState("");
-  const [inviteStatus,  setInviteStatus]  = useState(null); // null | "sending" | "sent" | "error"
-  const [inviteError,   setInviteError]   = useState("");
+  const [showInvite,      setShowInvite]      = useState(false);
+  const [inviteEmail,     setInviteEmail]     = useState("");
+  const [inviteStatus,    setInviteStatus]    = useState(null); // null | "sending" | "sent" | "error"
+  const [inviteError,     setInviteError]     = useState("");
+  const [newPassword,     setNewPassword]     = useState("");
+  const [pwStatus,        setPwStatus]        = useState(null); // null | "saving" | "saved" | "error"
+  const [pwError,         setPwError]         = useState("");
 
   const saveTimer     = useRef(null);
   const memberTimer   = useRef(null);
@@ -873,31 +876,6 @@ ${phaseSections}${notesHtml}${linksHtml}</body></html>`;
                 </div>
               )}
 
-              {/* Invite client */}
-              {isRaiz && !showInvite && (
-                <button onClick={()=>{setShowInvite(true);setInviteStatus(null);setInviteEmail("");}}
-                  style={{fontSize:11,background:"transparent",border:`1px solid ${LGRAY}`,borderRadius:6,padding:"3px 10px",cursor:"pointer",color:TMUTED,flexShrink:0}}>
-                  Share
-                </button>
-              )}
-              {isRaiz && showInvite && (
-                <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
-                  {inviteStatus==="sent"
-                    ? <span style={{fontSize:11,color:"#059669",fontWeight:600}}>Invite sent ✓</span>
-                    : <>
-                        <input value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)}
-                          onKeyDown={e=>{if(e.key==="Enter")inviteClient();if(e.key==="Escape")setShowInvite(false);}}
-                          autoFocus type="email" placeholder="Client email" style={{...iSt,width:170,fontSize:11}}/>
-                        <button onClick={inviteClient} disabled={inviteStatus==="sending"}
-                          style={{background:NAVY,border:"none",borderRadius:6,padding:"4px 10px",color:"#fff",fontWeight:600,fontSize:11,cursor:inviteStatus==="sending"?"default":"pointer",opacity:inviteStatus==="sending"?0.6:1}}>
-                          {inviteStatus==="sending"?"Sending…":"Send invite"}
-                        </button>
-                      </>
-                  }
-                  {inviteStatus==="error" && <span style={{fontSize:11,color:"#dc2626"}}>{inviteError}</span>}
-                  <button onClick={()=>setShowInvite(false)} style={{background:"transparent",border:"none",color:TMUTED,cursor:"pointer",fontSize:16}}>×</button>
-                </div>
-              )}
             </div>
 
             {/* Right: progress + save indicator + view toggle */}
@@ -1216,6 +1194,68 @@ ${phaseSections}${notesHtml}${linksHtml}</body></html>`;
         )}
 
       </div>
+
+      {/* ── Footer actions ── */}
+      <div style={{borderTop:`1px solid ${LGRAY}`,marginTop:8,padding:"20px 24px"}}>
+        <div style={{maxWidth:1000,margin:"0 auto",display:"flex",flexDirection:"column",gap:12}}>
+
+          {/* Raiz: invite client */}
+          {isRaiz && (
+            <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+              <span style={{fontSize:12,fontWeight:600,color:TMID,minWidth:100}}>Invite client</span>
+              {inviteStatus==="sent"
+                ? <span style={{fontSize:12,color:"#059669",fontWeight:600}}>Invite sent ✓</span>
+                : <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                    <input value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)}
+                      onKeyDown={e=>e.key==="Enter"&&inviteClient()}
+                      type="email" placeholder="Client email" style={{...iSt,width:220,fontSize:12}}/>
+                    <button onClick={inviteClient} disabled={inviteStatus==="sending"}
+                      style={{background:NAVY,border:"none",borderRadius:6,padding:"6px 16px",color:"#fff",fontWeight:600,fontSize:12,cursor:inviteStatus==="sending"?"default":"pointer",opacity:inviteStatus==="sending"?0.6:1}}>
+                      {inviteStatus==="sending"?"Sending…":"Send invite"}
+                    </button>
+                    {inviteStatus==="error" && <span style={{fontSize:11,color:"#dc2626"}}>{inviteError}</span>}
+                  </div>
+              }
+            </div>
+          )}
+
+          {/* Client: set password */}
+          {isClientUser && (
+            <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+              <span style={{fontSize:12,fontWeight:600,color:TMID,minWidth:100}}>Set password</span>
+              {pwStatus==="saved"
+                ? <span style={{fontSize:12,color:"#059669",fontWeight:600}}>Password saved ✓</span>
+                : <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                    <input value={newPassword} onChange={e=>setNewPassword(e.target.value)}
+                      onKeyDown={async e=>{
+                        if(e.key==="Enter"){
+                          setPwStatus("saving"); setPwError("");
+                          const {error} = await supabase.auth.updateUser({password: newPassword});
+                          if(error){setPwStatus("error");setPwError(error.message);}
+                          else{setPwStatus("saved");setNewPassword("");}
+                        }
+                      }}
+                      type="password" placeholder="New password" style={{...iSt,width:200,fontSize:12}}/>
+                    <button
+                      disabled={pwStatus==="saving"||!newPassword}
+                      onClick={async()=>{
+                        setPwStatus("saving"); setPwError("");
+                        const {error} = await supabase.auth.updateUser({password: newPassword});
+                        if(error){setPwStatus("error");setPwError(error.message);}
+                        else{setPwStatus("saved");setNewPassword("");}
+                      }}
+                      style={{background:NAVY,border:"none",borderRadius:6,padding:"6px 16px",color:"#fff",fontWeight:600,fontSize:12,cursor:pwStatus==="saving"||!newPassword?"default":"pointer",opacity:pwStatus==="saving"||!newPassword?0.6:1}}>
+                      {pwStatus==="saving"?"Saving…":"Save password"}
+                    </button>
+                    {pwStatus==="error" && <span style={{fontSize:11,color:"#dc2626"}}>{pwError}</span>}
+                  </div>
+              }
+            </div>
+          )}
+
+        </div>
+      </div>
+
     </div>
   );
 }
