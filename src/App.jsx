@@ -215,7 +215,7 @@ function LoginScreen() {
     setError(null);
     setLoading(true);
     if (magicMode) {
-      const { error: err } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: false } });
+      const { error: err } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: false, emailRedirectTo: window.location.origin + window.location.pathname } });
       if (err) { setError(err.message); setLoading(false); }
       else setMagicSent(true);
     } else {
