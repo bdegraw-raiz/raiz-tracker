@@ -352,6 +352,7 @@ export default function App() {
   const [addPassword,     setAddPassword]     = useState("");
   const [addStatus,       setAddStatus]       = useState(null); // null | "saving" | "saved" | "error"
   const [addError,        setAddError]        = useState("");
+  const [slackChannelId,  setSlackChannelId]  = useState("");
 
   const saveTimer     = useRef(null);
   const memberTimer   = useRef(null);
@@ -433,10 +434,13 @@ export default function App() {
       setEngLoading(true);
       setEngTasks([]);
 
-      // Project name
+      // Project name + slack channel
       const { data: eng } = await supabase
-        .from('engagements').select('name').eq('id', engagementId).single();
-      if (eng) setProjName(eng.name);
+        .from('engagements').select('name, slack_channel_id').eq('id', engagementId).single();
+      if (eng) {
+        setProjName(eng.name);
+        setSlackChannelId(eng.slack_channel_id || '');
+      }
 
       // engagement_state (statuses, internals, notes, etc.)
       const { data: st } = await supabase
@@ -1262,6 +1266,22 @@ ${phaseSections}${notesHtml}${linksHtml}</body></html>`;
                     {addStatus==="error" && <span style={{fontSize:11,color:"#dc2626"}}>{addError}</span>}
                   </div>
               }
+            </div>
+          )}
+
+          {/* Raiz: Slack channel ID */}
+          {!isClientUser && (
+            <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+              <span style={{fontSize:12,fontWeight:600,color:TMID,minWidth:100}}>Slack channel</span>
+              <input
+                value={slackChannelId}
+                onChange={e => setSlackChannelId(e.target.value)}
+                onBlur={async () => { await supabase.from('engagements').update({ slack_channel_id: slackChannelId || null }).eq('id', engagementId); }}
+                onKeyDown={async e => { if(e.key==="Enter") { await supabase.from('engagements').update({ slack_channel_id: slackChannelId || null }).eq('id', engagementId); e.target.blur(); } }}
+                placeholder="C0XXXXXXXXX"
+                style={{...iSt,width:160,fontSize:12}}
+              />
+              <span style={{fontSize:11,color:TMUTED}}>Paste channel ID from Slack — used for <code style={{fontSize:11}}>/raiz-status</code></span>
             </div>
           )}
 
