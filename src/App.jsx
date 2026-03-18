@@ -356,6 +356,7 @@ export default function App() {
 
   const saveTimer     = useRef(null);
   const memberTimer   = useRef(null);
+  const loadedForUser = useRef(null);
   const isRaiz        = view === "raiz";
   const isClientUser  = session?.user?.user_metadata?.role === "client";
 
@@ -393,7 +394,9 @@ export default function App() {
 
   // ── Load engagement list when authenticated ──
   useEffect(() => {
-    if (!session) return;
+    if (!session) { loadedForUser.current = null; return; }
+    if (loadedForUser.current === session.user.id) return; // token refresh — skip reload
+    loadedForUser.current = session.user.id;
     (async () => {
       setEngLoading(true);
 
