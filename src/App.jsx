@@ -1019,7 +1019,7 @@ ${phaseSections}${notesHtml}${linksHtml}</body></html>`;
                 return (
                   <div key={task.id} style={{background:"#fff",border:`1px solid ${isInt&&isRaiz?"#c7d2fe":LGRAY}`,borderRadius:10,overflow:"hidden",boxShadow:"0 1px 2px rgba(0,0,0,0.04)",opacity:task.hidden?0.5:1}}>
                     <div style={{display:"flex",alignItems:"flex-start",gap:12,padding:"11px 16px"}}>
-                      <button onClick={isRaiz?()=>cycleSt(task.key):undefined} title={isRaiz?`${st.label} — click to cycle`:st.label} style={{marginTop:4,width:13,height:13,borderRadius:"50%",border:"2px solid #fff",background:st.dot,cursor:isRaiz?"pointer":"default",flexShrink:0,boxShadow:`0 0 0 1.5px ${st.color}`}}/>
+                      {(()=>{ const canEdit=isRaiz||task.task_owner==='client'; return <button onClick={canEdit?()=>cycleSt(task.key):undefined} title={canEdit?`${st.label} — click to cycle`:st.label} style={{marginTop:4,width:13,height:13,borderRadius:"50%",border:"2px solid #fff",background:st.dot,cursor:canEdit?"pointer":"default",flexShrink:0,boxShadow:`0 0 0 1.5px ${st.color}`}}/>; })()}
                       <div style={{flex:1,minWidth:0}}>
                         <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
                           {isRaiz && editTaskId === task.id
