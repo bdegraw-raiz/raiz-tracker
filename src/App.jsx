@@ -539,8 +539,9 @@ export default function App() {
     if (!task) return;
     const i    = SCYCLE.indexOf(getSt(id));
     const next = SCYCLE[(i + 1) % SCYCLE.length];
-    setEngTasks(prev => prev.map(t => t.key === id ? { ...t, status: next } : t));
-    await supabase.from('engagement_tasks').update({ status: next }).eq('id', task.id);
+    const now = new Date().toISOString();
+    setEngTasks(prev => prev.map(t => t.key === id ? { ...t, status: next, status_updated_at: now } : t));
+    await supabase.from('engagement_tasks').update({ status: next, status_updated_at: now }).eq('id', task.id);
   };
 
   const toggleTaskInternal = async key => {

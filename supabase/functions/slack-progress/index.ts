@@ -5,13 +5,11 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Verify Slack signing secret (HMAC-SHA256)
 async function verifySlackSignature(signingSecret: string, rawBody: string, req: Request): Promise<boolean> {
   const timestamp = req.headers.get("x-slack-request-timestamp");
   const slackSig  = req.headers.get("x-slack-signature");
   if (!timestamp || !slackSig) return false;
   if (Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return false;
-
   const sigBase = `v0:${timestamp}:${rawBody}`;
   const key = await crypto.subtle.importKey(
     "raw", new TextEncoder().encode(signingSecret),
@@ -25,28 +23,43 @@ async function verifySlackSignature(signingSecret: string, rawBody: string, req:
 const TZ = Deno.env.get("TIMEZONE") ?? "America/New_York";
 
 const STATUS_LABELS: Record<string, string> = {
-  complete:    "Complete",
-  in_progress: "In Progress",
-  not_started: "Not Started",
-  blocked:     "Blocked",
+  complete:    "✅ Complete",
+  in_progress: "🔄 In Progress",
+  not_started: "⬜ Not Started",
+  blocked:     "🚫 Blocked",
 };
 
 function fmtDate(isoStr: string): string {
   if (!isoStr) return "";
   const d = new Date(isoStr);
   if (isNaN(d.getTime())) return "";
-  const now = new Date();
+  const now  = new Date();
   const opts = { hour: "numeric" as const, minute: "2-digit" as const, timeZone: TZ };
   const time = d.toLocaleTimeString("en-US", opts);
   const todayStr = now.toLocaleDateString("en-US", { timeZone: TZ });
   const dStr     = d.toLocaleDateString("en-US", { timeZone: TZ });
   if (dStr === todayStr) return `Today · ${time}`;
   const mo = d.toLocaleString("en-US", { month: "short", day: "numeric", timeZone: TZ });
-  if (d.getFullYear() === now.getFullYear()) return `${mo} · ${time}`;
-  return `${mo} '${String(d.getFullYear()).slice(2)} · ${time}`;
+  return `${mo} · ${time}`;
 }
 
-async function buildAndPostProgress(channelId: string, responseUrl: string) {
+function parsePeriod(text: string): { label: string; since: Date } {
+  const t = (text ?? "").trim().toLowerCase();
+  const now = new Date();
+  if (t === "today") {
+    const since = new Date(now.toLocaleDateString("en-US", { timeZone: TZ }));
+    return { label: "today", since };
+  }
+  if (t === "48h" || t === "48hours") {
+    const since = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+    return { label: "last 48 hours", since };
+  }
+  // default: last 7 days
+  const since = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  return { label: "last 7 days", since };
+}
+
+async function buildAndPostProgress(channelId: string, responseUrl: string, queryText: string) {
   const supabase = createClient(
     Deno.env.get("SUPABASE_URL")!,
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -65,51 +78,58 @@ async function buildAndPostProgress(channelId: string, responseUrl: string) {
     return;
   }
 
-  const [{ data: tasks }, { data: state }, { data: recentLogs }] = await Promise.all([
-    supabase.from("engagement_tasks").select("task_key, label, hidden").eq("engagement_id", eng.id),
-    supabase.from("engagement_state").select("task_statuses").eq("engagement_id", eng.id).single(),
-    supabase.from("task_logs").select("text, author_name, created_at, task_id").eq("engagement_id", eng.id).is("deleted_at", null).eq("internal", false).order("created_at", { ascending: false }).limit(5),
-  ]);
+  const { label: periodLabel, since } = parsePeriod(queryText);
 
-  const statuses: Record<string, string> = state?.task_statuses ?? {};
-  const taskByKey: Record<string, any> = {};
-  for (const t of (tasks ?? [])) taskByKey[t.task_key] = t;
+  const { data: allTasks } = await supabase
+    .from("engagement_tasks")
+    .select("id, label, hidden, internal, status, status_updated_at, task_owner")
+    .eq("engagement_id", eng.id);
 
-  const visTasks = (tasks ?? []).filter((t: any) => !t.hidden);
+  const visTasks = (allTasks ?? []).filter((t: any) => !t.hidden && !t.internal);
   const totalT   = visTasks.length;
-  const doneT    = visTasks.filter((t: any) => statuses[t.task_key] === "complete").length;
+  const doneT    = visTasks.filter((t: any) => t.status === "complete").length;
   const pct      = totalT ? Math.round(doneT / totalT * 100) : 0;
 
-  const activityLines = (recentLogs ?? [])
-    .map((l: any) => {
-      const who        = l.author_name ? ` — ${l.author_name}` : "";
-      const when       = l.created_at ? ` · ${fmtDate(l.created_at)}` : "";
-      const task       = taskByKey[l.task_id];
-      const taskLabel  = task?.label ?? "";
-      const taskStatus = STATUS_LABELS[statuses[l.task_id]] ?? "Not Started";
-      const context    = taskLabel ? ` _(${taskLabel} - ${taskStatus})_` : "";
-      return `• "${l.text}"${who}${when}${context}`;
-    }).join("\n");
+  const changedTasks = visTasks
+    .filter((t: any) => t.status_updated_at && new Date(t.status_updated_at) >= since)
+    .sort((a: any, b: any) => new Date(b.status_updated_at).getTime() - new Date(a.status_updated_at).getTime());
+
+  const ownerLabel = (owner: string) => {
+    if (owner === "raiz")   return "Raiz";
+    if (owner === "client") return eng.name;
+    if (owner === "other")  return "Other";
+    return owner || "—";
+  };
+
+  const taskLines = changedTasks.length
+    ? changedTasks.map((t: any) =>
+        `• ${t.label}  |  ${ownerLabel(t.task_owner)}  |  ${STATUS_LABELS[t.status] ?? t.status}  |  ${fmtDate(t.status_updated_at)}`
+      ).join("\n")
+    : "_No status changes in this period._";
 
   const trackerUrl = Deno.env.get("TRACKER_URL") ?? "";
 
   const blocks: any[] = [
-    { type: "header", text: { type: "plain_text", text: `📊 ${eng.name} — Progress Update`, emoji: true } },
-    { type: "section", text: { type: "mrkdwn", text: `*${pct}% complete*  (${doneT} of ${totalT} tasks)` } },
+    {
+      type: "header",
+      text: { type: "plain_text", text: eng.name, emoji: true },
+    },
+    {
+      type: "section",
+      text: { type: "mrkdwn", text: `*${pct}% complete*  (${doneT} of ${totalT} tasks)` },
+    },
+    {
+      type: "section",
+      text: { type: "mrkdwn", text: `*Status changes — ${periodLabel}*\n${taskLines}` },
+    },
   ];
 
-  if (activityLines) {
-    blocks.push({ type: "section", text: { type: "mrkdwn", text: `*Recent Activity*\n${activityLines}` } });
-  }
-
   if (trackerUrl) {
-    blocks.push({ type: "section", text: { type: "mrkdwn", text: `<${trackerUrl}|View full tracker →>` } });
+    blocks.push({
+      type: "section",
+      text: { type: "mrkdwn", text: `<${trackerUrl}|View full tracker →>` },
+    });
   }
-
-  blocks.push({
-    type: "context",
-    elements: [{ type: "mrkdwn", text: `_Updated ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}_` }],
-  });
 
   await fetch(responseUrl, {
     method: "POST",
@@ -123,19 +143,19 @@ Deno.serve(async (req) => {
 
   const rawBody = await req.text();
 
-  // TODO: re-enable signature verification once confirmed working
-  // const signingSecret = Deno.env.get("SLACK_SIGNING_SECRET");
-  // if (signingSecret) {
-  //   const valid = await verifySlackSignature(signingSecret, rawBody, req);
-  //   if (!valid) return new Response(
-  //     JSON.stringify({ response_type: "ephemeral", text: "Invalid request signature." }),
-  //     { status: 200, headers: { "Content-Type": "application/json" } }
-  //   );
-  // }
+  const signingSecret = Deno.env.get("SLACK_SIGNING_SECRET");
+  if (signingSecret) {
+    const valid = await verifySlackSignature(signingSecret, rawBody, req);
+    if (!valid) return new Response(
+      JSON.stringify({ response_type: "ephemeral", text: "Invalid request signature." }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  }
 
   const params      = new URLSearchParams(rawBody);
   const channelId   = params.get("channel_id") ?? "";
   const responseUrl = params.get("response_url") ?? "";
+  const queryText   = params.get("text") ?? "";
 
   if (!channelId || !responseUrl) {
     return new Response(
@@ -144,9 +164,8 @@ Deno.serve(async (req) => {
     );
   }
 
-  // Respond immediately to Slack, then post result asynchronously via response_url
   // @ts-ignore
-  EdgeRuntime.waitUntil(buildAndPostProgress(channelId, responseUrl));
+  EdgeRuntime.waitUntil(buildAndPostProgress(channelId, responseUrl, queryText));
 
   return new Response(
     JSON.stringify({ response_type: "ephemeral", text: "Fetching progress…" }),
