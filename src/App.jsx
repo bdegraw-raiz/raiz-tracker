@@ -1035,6 +1035,27 @@ ${phaseSections}${notesHtml}${linksHtml}</body></html>`;
                                 <button onClick={()=>moveTask(task.id,'down')} title="Move down" style={{background:"transparent",border:"none",color:TMUTED,cursor:"pointer",fontSize:11,padding:"0 1px",lineHeight:1}}>↓</button>
                               </>
                             )}
+                            {isRaiz ? (
+                              <>
+                                <select value={task.task_owner} onChange={e=>updateTaskMeta(task.id,{task_owner:e.target.value})}
+                                  style={{fontSize:11,padding:"2px 6px",borderRadius:6,border:`1px solid ${LGRAY}`,color:task.task_owner?TEXT:TMUTED,background:"#fff",cursor:"pointer"}}>
+                                  <option value="">Owner —</option>
+                                  <option value="raiz">Raiz</option>
+                                  <option value="client">{engagements.find(e=>e.id===engagementId)?.name||"Client"}</option>
+                                  <option value="other">Other</option>
+                                </select>
+                                <select value={task.target_week} onChange={e=>updateTaskMeta(task.id,{target_week:e.target.value?parseInt(e.target.value):null})}
+                                  style={{fontSize:11,padding:"2px 6px",borderRadius:6,border:`1px solid ${LGRAY}`,color:task.target_week?TEXT:TMUTED,background:"#fff",cursor:"pointer"}}>
+                                  <option value="">Week —</option>
+                                  {Array.from({length:24},(_,i)=><option key={i+1} value={i+1}>Week {i+1}</option>)}
+                                </select>
+                              </>
+                            ) : (
+                              <>
+                                {task.task_owner && <span style={{fontSize:11,padding:"2px 9px",borderRadius:99,background:FGRAY,border:`1px solid ${LGRAY}`,color:TMID}}>{task.task_owner==="raiz"?"Raiz":task.task_owner==="client"?(engagements.find(e=>e.id===engagementId)?.name||"Client"):"Other"}</span>}
+                                {task.target_week && <span style={{fontSize:11,padding:"2px 9px",borderRadius:99,background:FGRAY,border:`1px solid ${LGRAY}`,color:TMID}}>Week {task.target_week}</span>}
+                              </>
+                            )}
                             <span style={{fontSize:11,padding:"2px 9px",borderRadius:99,background:`${st.color}18`,color:st.color,fontWeight:600}}>{st.label}</span>
                             {task.instructions&&<button onClick={()=>setInstrOpen(iOpen?null:task.key)} style={{fontSize:11,background:"transparent",border:"none",color:TMUTED,cursor:"pointer"}}>{iOpen?"▲ hide":"ℹ guide"}</button>}
                             {isRaiz&&<LockBtn active={isInt} onClick={()=>toggleTaskInternal(task.key)}/>}
@@ -1044,32 +1065,6 @@ ${phaseSections}${notesHtml}${linksHtml}</body></html>`;
                                 : <button onClick={()=>toggleTaskHidden(task.id)} title={task.hidden?"Restore task":"Hide task"} style={{background:"transparent",border:"none",color:task.hidden?"#059669":TMUTED,cursor:"pointer",fontSize:11,fontWeight:600,padding:"0 2px"}}>{task.hidden?"show":"hide"}</button>
                             )}
                           </div>
-                        </div>
-                        {/* ── Owner & Week row ── */}
-                        <div style={{display:"flex",gap:8,marginTop:6,flexWrap:"wrap"}}>
-                          {isRaiz ? (
-                            <>
-                              <select value={task.task_owner} onChange={e=>updateTaskMeta(task.id,{task_owner:e.target.value})}
-                                style={{fontSize:11,padding:"2px 6px",borderRadius:6,border:`1px solid ${LGRAY}`,color:task.task_owner?TEXT:TMUTED,background:"#fff",cursor:"pointer"}}>
-                                <option value="">Owner —</option>
-                                <option value="raiz">Raiz</option>
-                                <option value="client">{engagements.find(e=>e.id===engagementId)?.name||"Client"}</option>
-                                <option value="other">Other</option>
-                              </select>
-                              <select value={task.target_week} onChange={e=>updateTaskMeta(task.id,{target_week:e.target.value?parseInt(e.target.value):null})}
-                                style={{fontSize:11,padding:"2px 6px",borderRadius:6,border:`1px solid ${LGRAY}`,color:task.target_week?TEXT:TMUTED,background:"#fff",cursor:"pointer"}}>
-                                <option value="">Week —</option>
-                                {Array.from({length:24},(_,i)=><option key={i+1} value={i+1}>Week {i+1}</option>)}
-                              </select>
-                            </>
-                          ) : (
-                            <>
-                              {task.task_owner && <span style={{fontSize:11,padding:"2px 9px",borderRadius:99,background:FGRAY,border:`1px solid ${LGRAY}`,color:TMID}}>
-                                {task.task_owner==="raiz"?"Raiz":task.task_owner==="client"?(engagements.find(e=>e.id===engagementId)?.name||"Client"):"Other"}
-                              </span>}
-                              {task.target_week && <span style={{fontSize:11,padding:"2px 9px",borderRadius:99,background:FGRAY,border:`1px solid ${LGRAY}`,color:TMID}}>Week {task.target_week}</span>}
-                            </>
-                          )}
                         </div>
                         {iOpen&&<div style={{marginTop:8,padding:12,background:FGRAY,border:`1px solid ${LGRAY}`,borderRadius:8,fontSize:12,color:TMID,lineHeight:1.7}}>{task.instructions}</div>}
                         {tlog.length>0&&(
