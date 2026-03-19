@@ -200,7 +200,8 @@ const mapTask = r => ({
   label: r.label, instructions: r.instructions || '',
   hidden: r.hidden, is_custom: r.is_custom, sort_order: r.sort_order,
   task_owner: r.task_owner || '', target_week: r.target_week || '',
-  depends_on_task_key: r.depends_on_task_key || ''
+  depends_on_task_key: r.depends_on_task_key || '',
+  status: r.status || 'not_started'
 });
 
 // ── Login screen ────────────────────────────────────────────────────────────
@@ -328,7 +329,7 @@ export default function App() {
 
   // ── Persisted engagement state ──
   const [projName,     setProjName]     = useState("Client Name");
-  const [statuses,     setStatuses]     = useState({});
+  const [statuses,     setStatuses]     = useState({}); // legacy — kept for scheduleSave compat only
   const [taskInternal, setTaskInternal] = useState({});
   const [noteIntFlags, setNoteIntFlags] = useState({});
   const [refNotes,     setRefNotes]     = useState(DEFAULT_NOTES);
@@ -456,15 +457,12 @@ export default function App() {
       const { data: st } = await supabase
         .from('engagement_state').select('*').eq('engagement_id', engagementId).single();
       if (st) {
-        setStatuses(st.task_statuses    || {});
         setTaskInternal(st.task_internal || {});
         setNoteIntFlags(st.note_int_flags || {});
         setRefNotes(st.ref_notes         ?? DEFAULT_NOTES);
         setRefNotesInt(!!st.ref_notes_int);
         setLinkIntFlags(st.link_int_flags || {});
       } else {
-        // First time seeing this engagement — reset to defaults
-        setStatuses({});
         setTaskInternal({});
         setNoteIntFlags({});
         setRefNotes(DEFAULT_NOTES);
@@ -542,13 +540,14 @@ export default function App() {
   }, [engagementId]);
 
   // ── Helpers that update state + schedule save ──
-  const getSt   = id => statuses[id] || "not_started";
-  const cycleSt = id => {
-    const i   = SCYCLE.indexOf(getSt(id));
+  const getSt   = id => engTasks.find(t => t.key === id)?.status || "not_started";
+  const cycleSt = async id => {
+    const task = engTasks.find(t => t.key === id);
+    if (!task) return;
+    const i    = SCYCLE.indexOf(getSt(id));
     const next = SCYCLE[(i + 1) % SCYCLE.length];
-    const ns   = { ...statuses, [id]: next };
-    setStatuses(ns);
-    scheduleSave({ task_statuses: ns });
+    setEngTasks(prev => prev.map(t => t.key === id ? { ...t, status: next } : t));
+    await supabase.from('engagement_tasks').update({ status: next }).eq('id', task.id);
   };
 
   const toggleTaskInternal = id => {
