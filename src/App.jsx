@@ -198,7 +198,9 @@ function shortName(full) {
 const mapTask = r => ({
   id: r.id, key: r.task_key, phase_id: r.phase_id,
   label: r.label, instructions: r.instructions || '',
-  hidden: r.hidden, is_custom: r.is_custom, sort_order: r.sort_order
+  hidden: r.hidden, is_custom: r.is_custom, sort_order: r.sort_order,
+  task_owner: r.task_owner || '', target_week: r.target_week || '',
+  depends_on_task_key: r.depends_on_task_key || ''
 });
 
 // ── Login screen ────────────────────────────────────────────────────────────
@@ -608,6 +610,11 @@ export default function App() {
   };
 
   // ── Task management ──
+  const updateTaskMeta = async (dbId, patch) => {
+    await supabase.from('engagement_tasks').update(patch).eq('id', dbId);
+    setEngTasks(ts => ts.map(t => t.id === dbId ? { ...t, ...patch } : t));
+  };
+
   const renameTask = async (dbId, label) => {
     await supabase.from('engagement_tasks').update({ label }).eq('id', dbId);
     setEngTasks(ts => ts.map(t => t.id === dbId ? { ...t, label } : t));
@@ -700,7 +707,10 @@ export default function App() {
         const notesHtml = taskLogs.length ? `<div style="margin-top:8px;padding-left:12px;border-left:2px solid #e5e7eb">${
           taskLogs.map(n => `<div style="margin-bottom:5px">${isRaiz && n.internal ? '<span style="font-size:10px;color:#1a2744;margin-right:4px">🔒</span>' : ''}<span style="font-size:12px;color:#4a4a4a">${n.text}</span><span style="font-size:10px;color:#8a8a8a;margin-left:6px">${n.author ? `— ${n.author} · ` : ''}${fmtTs(n.ts)}</span></div>`).join('')
         }</div>` : '';
-        return `<tr style="border-bottom:1px solid #f3f4f6"><td style="padding:10px 8px;vertical-align:top"><div style="font-size:13px;font-weight:500;color:#1c1c1e">${t.label}${isInt && isRaiz ? '<span style="font-size:10px;background:#e0e7ff;color:#1a2744;padding:1px 8px;border-radius:99px;font-weight:600;margin-left:6px">Internal</span>' : ''}${t.hidden && isRaiz ? '<span style="font-size:10px;background:#f3f4f6;color:#8a8a8a;padding:1px 8px;border-radius:99px;font-weight:600;margin-left:6px">Hidden</span>' : ''}</div>${notesHtml}</td><td style="padding:10px 8px;white-space:nowrap;vertical-align:top">${sBadge(getSt(t.key))}</td></tr>`;
+        const engName = engagements.find(e=>e.id===engagementId)?.name||"Client";
+        const ownerLabel = t.task_owner==="raiz"?"Raiz":t.task_owner==="client"?engName:t.task_owner==="other"?"Other":"";
+        const metaHtml = (ownerLabel||t.target_week) ? `<div style="margin-top:4px;display:flex;gap:6px">${ownerLabel?`<span style="font-size:10px;padding:1px 8px;border-radius:99px;background:#f3f4f6;color:#4a4a4a">${ownerLabel}</span>`:""}${t.target_week?`<span style="font-size:10px;padding:1px 8px;border-radius:99px;background:#f3f4f6;color:#4a4a4a">Week ${t.target_week}</span>`:""}</div>` : '';
+        return `<tr style="border-bottom:1px solid #f3f4f6"><td style="padding:10px 8px;vertical-align:top"><div style="font-size:13px;font-weight:500;color:#1c1c1e">${t.label}${isInt && isRaiz ? '<span style="font-size:10px;background:#e0e7ff;color:#1a2744;padding:1px 8px;border-radius:99px;font-weight:600;margin-left:6px">Internal</span>' : ''}${t.hidden && isRaiz ? '<span style="font-size:10px;background:#f3f4f6;color:#8a8a8a;padding:1px 8px;border-radius:99px;font-weight:600;margin-left:6px">Hidden</span>' : ''}</div>${metaHtml}${notesHtml}</td><td style="padding:10px 8px;white-space:nowrap;vertical-align:top">${sBadge(getSt(t.key))}</td></tr>`;
       }).join('');
       return `<div style="margin-bottom:28px"><div style="display:flex;align-items:center;margin-bottom:10px"><div style="width:26px;height:26px;border-radius:7px;background:${ph.accent};display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:11px;font-weight:700;margin-right:10px;flex-shrink:0">${ph.num}</div><span style="font-size:15px;font-weight:700;color:#1c1c1e">${ph.label}</span><span style="font-size:12px;color:#8a8a8a;margin-left:10px">${prog.done}/${prog.total} · ${prog.pct}%</span></div><table style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden"><colgroup><col style="width:72%"><col style="width:28%"></colgroup>${rows}</table></div>`;
     }).join('');
@@ -1034,6 +1044,32 @@ ${phaseSections}${notesHtml}${linksHtml}</body></html>`;
                                 : <button onClick={()=>toggleTaskHidden(task.id)} title={task.hidden?"Restore task":"Hide task"} style={{background:"transparent",border:"none",color:task.hidden?"#059669":TMUTED,cursor:"pointer",fontSize:11,fontWeight:600,padding:"0 2px"}}>{task.hidden?"show":"hide"}</button>
                             )}
                           </div>
+                        </div>
+                        {/* ── Owner & Week row ── */}
+                        <div style={{display:"flex",gap:8,marginTop:6,flexWrap:"wrap"}}>
+                          {isRaiz ? (
+                            <>
+                              <select value={task.task_owner} onChange={e=>updateTaskMeta(task.id,{task_owner:e.target.value})}
+                                style={{fontSize:11,padding:"2px 6px",borderRadius:6,border:`1px solid ${LGRAY}`,color:task.task_owner?TEXT:TMUTED,background:"#fff",cursor:"pointer"}}>
+                                <option value="">Owner —</option>
+                                <option value="raiz">Raiz</option>
+                                <option value="client">{engagements.find(e=>e.id===engagementId)?.name||"Client"}</option>
+                                <option value="other">Other</option>
+                              </select>
+                              <select value={task.target_week} onChange={e=>updateTaskMeta(task.id,{target_week:e.target.value?parseInt(e.target.value):null})}
+                                style={{fontSize:11,padding:"2px 6px",borderRadius:6,border:`1px solid ${LGRAY}`,color:task.target_week?TEXT:TMUTED,background:"#fff",cursor:"pointer"}}>
+                                <option value="">Week —</option>
+                                {Array.from({length:24},(_,i)=><option key={i+1} value={i+1}>Week {i+1}</option>)}
+                              </select>
+                            </>
+                          ) : (
+                            <>
+                              {task.task_owner && <span style={{fontSize:11,padding:"2px 9px",borderRadius:99,background:FGRAY,border:`1px solid ${LGRAY}`,color:TMID}}>
+                                {task.task_owner==="raiz"?"Raiz":task.task_owner==="client"?(engagements.find(e=>e.id===engagementId)?.name||"Client"):"Other"}
+                              </span>}
+                              {task.target_week && <span style={{fontSize:11,padding:"2px 9px",borderRadius:99,background:FGRAY,border:`1px solid ${LGRAY}`,color:TMID}}>Week {task.target_week}</span>}
+                            </>
+                          )}
                         </div>
                         {iOpen&&<div style={{marginTop:8,padding:12,background:FGRAY,border:`1px solid ${LGRAY}`,borderRadius:8,fontSize:12,color:TMID,lineHeight:1.7}}>{task.instructions}</div>}
                         {tlog.length>0&&(
