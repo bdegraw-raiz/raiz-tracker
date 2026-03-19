@@ -1175,7 +1175,7 @@ ${phaseSections}${notesHtml}${linksHtml}</body></html>`;
                         {links.filter(l=>isRaiz||!l.internal).map(l=>(
                           <div key={l.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 12px",background:FGRAY,border:`1px solid ${LGRAY}`,borderRadius:8}}>
                             {l.internal&&<span style={{fontSize:10,color:NAVY}}>🔒</span>}
-                            <a href={l.url} target="_blank" rel="noreferrer" style={{flex:1,color:NAVY,fontSize:13,textDecoration:"none",fontWeight:600}}>{l.label}</a>
+                            <a href={/^https?:\/\//i.test(l.url)?l.url:`https://${l.url}`} target="_blank" rel="noreferrer" style={{flex:1,color:NAVY,fontSize:13,textDecoration:"none",fontWeight:600}}>{l.label}</a>
                             <span style={{fontSize:11,color:TMUTED,maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l.url}</span>
                             {isRaiz&&<LockBtn active={!!l.internal} onClick={()=>toggleLinkInt(l.id)}/>}
                             {isRaiz&&<button onClick={()=>removeLink(l.id)} style={{background:"transparent",border:"none",cursor:"pointer",fontSize:16,color:TMUTED}}>×</button>}
