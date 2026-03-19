@@ -338,6 +338,7 @@ export default function App() {
   const [links,        setLinks]        = useState([]);   // [{id,label,url,internal}]
   const [members,      setMembers]      = useState([{...BLANK_MEMBER}]);
   const [phases,        setPhases]        = useState(PHASES); // defaults to hardcoded until DB loads
+  const [ownerTypes,    setOwnerTypes]    = useState([{id:'raiz',label:'Raiz'},{id:'client',label:'Client'},{id:'other',label:'Other'}]);
   const [engTasks,      setEngTasks]      = useState([]);
   const [editTaskId,    setEditTaskId]    = useState(null);
   const [editTaskLabel, setEditTaskLabel] = useState("");
@@ -401,6 +402,10 @@ export default function App() {
     loadedForUser.current = session.user.id;
     (async () => {
       setEngLoading(true);
+
+      // Load owner types
+      const { data: ot } = await supabase.from('task_owner_types').select('*').order('sort_order');
+      if (ot?.length) setOwnerTypes(ot);
 
       // Load phases (global config table)
       const { data: ph, error: phErr } = await supabase
@@ -1040,9 +1045,11 @@ ${phaseSections}${notesHtml}${linksHtml}</body></html>`;
                                 <select value={task.task_owner} onChange={e=>updateTaskMeta(task.id,{task_owner:e.target.value})}
                                   style={{fontSize:11,padding:"2px 6px",borderRadius:6,border:`1px solid ${LGRAY}`,color:task.task_owner?TEXT:TMUTED,background:"#fff",cursor:"pointer"}}>
                                   <option value="">Owner —</option>
-                                  <option value="raiz">Raiz</option>
-                                  <option value="client">{engagements.find(e=>e.id===engagementId)?.name||"Client"}</option>
-                                  <option value="other">Other</option>
+                                  {ownerTypes.map(ot=>(
+                                    <option key={ot.id} value={ot.id}>
+                                      {ot.id==='client'?(engagements.find(e=>e.id===engagementId)?.name||'Client'):ot.label}
+                                    </option>
+                                  ))}
                                 </select>
                                 <select value={task.target_week} onChange={e=>updateTaskMeta(task.id,{target_week:e.target.value?parseInt(e.target.value):null})}
                                   style={{fontSize:11,padding:"2px 6px",borderRadius:6,border:`1px solid ${LGRAY}`,color:task.target_week?TEXT:TMUTED,background:"#fff",cursor:"pointer"}}>
@@ -1052,7 +1059,7 @@ ${phaseSections}${notesHtml}${linksHtml}</body></html>`;
                               </>
                             ) : (
                               <>
-                                {task.task_owner && <span style={{fontSize:11,padding:"2px 9px",borderRadius:99,background:FGRAY,border:`1px solid ${LGRAY}`,color:TMID}}>{task.task_owner==="raiz"?"Raiz":task.task_owner==="client"?(engagements.find(e=>e.id===engagementId)?.name||"Client"):"Other"}</span>}
+                                {task.task_owner && <span style={{fontSize:11,padding:"2px 9px",borderRadius:99,background:FGRAY,border:`1px solid ${LGRAY}`,color:TMID}}>{task.task_owner==="client"?(engagements.find(e=>e.id===engagementId)?.name||"Client"):(ownerTypes.find(o=>o.id===task.task_owner)?.label||task.task_owner)}</span>}
                                 {task.target_week && <span style={{fontSize:11,padding:"2px 9px",borderRadius:99,background:FGRAY,border:`1px solid ${LGRAY}`,color:TMID}}>Week {task.target_week}</span>}
                               </>
                             )}
