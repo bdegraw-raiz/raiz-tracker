@@ -201,7 +201,8 @@ const mapTask = r => ({
   hidden: r.hidden, is_custom: r.is_custom, sort_order: r.sort_order,
   task_owner: r.task_owner || '', target_week: r.target_week || '',
   depends_on_task_key: r.depends_on_task_key || '',
-  status: r.status || 'not_started'
+  status: r.status || 'not_started',
+  internal: r.internal || false
 });
 
 // ── Login screen ────────────────────────────────────────────────────────────
@@ -329,12 +330,9 @@ export default function App() {
 
   // ── Persisted engagement state ──
   const [projName,     setProjName]     = useState("Client Name");
-  const [statuses,     setStatuses]     = useState({}); // legacy — kept for scheduleSave compat only
-  const [taskInternal, setTaskInternal] = useState({});
-  const [noteIntFlags, setNoteIntFlags] = useState({});
   const [refNotes,     setRefNotes]     = useState(DEFAULT_NOTES);
   const [refNotesInt,  setRefNotesInt]  = useState(false);
-  const [linkIntFlags, setLinkIntFlags] = useState({});
+  const [startDate,    setStartDate]    = useState(null);
   const [logs,         setLogs]         = useState({});   // { taskId: [{id,text,internal,ts}] }
   const [links,        setLinks]        = useState([]);   // [{id,label,url,internal}]
   const [members,      setMembers]      = useState([{...BLANK_MEMBER}]);
@@ -447,27 +445,22 @@ export default function App() {
 
       // Project name + slack channel
       const { data: eng } = await supabase
-        .from('engagements').select('name, slack_channel_id').eq('id', engagementId).single();
+        .from('engagements').select('name, slack_channel_id, start_date').eq('id', engagementId).single();
       if (eng) {
         setProjName(eng.name);
         setSlackChannelId(eng.slack_channel_id || '');
+        setStartDate(eng.start_date || null);
       }
 
       // engagement_state (statuses, internals, notes, etc.)
       const { data: st } = await supabase
         .from('engagement_state').select('*').eq('engagement_id', engagementId).single();
       if (st) {
-        setTaskInternal(st.task_internal || {});
-        setNoteIntFlags(st.note_int_flags || {});
-        setRefNotes(st.ref_notes         ?? DEFAULT_NOTES);
+        setRefNotes(st.ref_notes ?? DEFAULT_NOTES);
         setRefNotesInt(!!st.ref_notes_int);
-        setLinkIntFlags(st.link_int_flags || {});
       } else {
-        setTaskInternal({});
-        setNoteIntFlags({});
         setRefNotes(DEFAULT_NOTES);
         setRefNotesInt(false);
-        setLinkIntFlags({});
       }
 
       // task_logs
@@ -550,10 +543,12 @@ export default function App() {
     await supabase.from('engagement_tasks').update({ status: next }).eq('id', task.id);
   };
 
-  const toggleTaskInternal = id => {
-    const nv = { ...taskInternal, [id]: !taskInternal[id] };
-    setTaskInternal(nv);
-    scheduleSave({ task_internal: nv });
+  const toggleTaskInternal = async key => {
+    const task = engTasks.find(t => t.key === key);
+    if (!task) return;
+    const internal = !task.internal;
+    setEngTasks(ts => ts.map(t => t.key === key ? { ...t, internal } : t));
+    await supabase.from('engagement_tasks').update({ internal }).eq('id', task.id);
   };
 
   const toggleNoteIntF = id => {
@@ -574,12 +569,9 @@ export default function App() {
   const toggleLinkInt = async (linkId) => {
     const link = links.find(l => l.id === linkId);
     if (!link) return;
-    const updated = !link.internal;
-    setLinks(ls => ls.map(l => l.id === linkId ? { ...l, internal: updated } : l));
-    const nf = { ...linkIntFlags, [linkId]: updated };
-    setLinkIntFlags(nf);
-    await supabase.from('links').update({ internal: updated }).eq('id', linkId);
-    scheduleSave({ link_int_flags: nf });
+    const internal = !link.internal;
+    setLinks(ls => ls.map(l => l.id === linkId ? { ...l, internal } : l));
+    await supabase.from('links').update({ internal }).eq('id', linkId);
   };
 
   const saveProjName = async (name) => {
@@ -588,8 +580,13 @@ export default function App() {
     await supabase.from('engagements').update({ name }).eq('id', engagementId);
   };
 
+  const saveStartDate = async (val) => {
+    setStartDate(val || null);
+    await supabase.from('engagements').update({ start_date: val || null }).eq('id', engagementId);
+  };
+
   // ── Notes ──
-  const addNote = async tid => {
+  const addNote = async (tid, taskDbId) => {
     const text = (noteIn[tid] || "").trim();
     if (!text) return;
     const isInt      = !!noteIntF[tid];
@@ -597,7 +594,7 @@ export default function App() {
     const authorId   = session.user.id;
     const authorRole = isClientUser ? 'client' : 'raiz';
     const { data } = await supabase.from('task_logs')
-      .insert({ engagement_id: engagementId, task_id: tid, text, internal: isInt, author_name: authorName, author_id: authorId, author_role: authorRole })
+      .insert({ engagement_id: engagementId, task_id: tid, engagement_task_id: taskDbId || null, text, internal: isInt, author_name: authorName, author_id: authorId, author_role: authorRole })
       .select().single();
     if (data) {
       const entry = { id: data.id, text, internal: isInt, ts: data.created_at, author: authorName, author_id: authorId, author_role: authorRole };
@@ -701,12 +698,12 @@ export default function App() {
     };
     const phaseSections = phases.map(ph => {
       const tasks = engTasks
-        .filter(t => t.phase_id === ph.id && (isRaiz || (!t.hidden && !taskInternal[t.key])))
+        .filter(t => t.phase_id === ph.id && (isRaiz || (!t.hidden && !t.internal)))
         .sort((a, b) => a.sort_order - b.sort_order);
       if (!tasks.length) return '';
       const prog = phaseProg(ph);
       const rows = tasks.map(t => {
-        const isInt = !!taskInternal[t.key];
+        const isInt = !!t.internal;
         const taskLogs = (logs[t.key] || []).filter(n => isRaiz || !n.internal);
         const notesHtml = taskLogs.length ? `<div style="margin-top:8px;padding-left:12px;border-left:2px solid #e5e7eb">${
           taskLogs.map(n => `<div style="margin-bottom:5px">${isRaiz && n.internal ? '<span style="font-size:10px;color:#1a2744;margin-right:4px">🔒</span>' : ''}<span style="font-size:12px;color:#4a4a4a">${n.text}</span><span style="font-size:10px;color:#8a8a8a;margin-left:6px">${n.author ? `— ${n.author} · ` : ''}${fmtTs(n.ts)}</span></div>`).join('')
@@ -806,17 +803,17 @@ ${phaseSections}${notesHtml}${linksHtml}</body></html>`;
 
   // ── Progress calcs ──
   const phaseProg = ph => {
-    const vis  = engTasks.filter(t => t.phase_id === ph.id && !t.hidden && !taskInternal[t.key]);
+    const vis  = engTasks.filter(t => t.phase_id === ph.id && !t.hidden && !t.internal);
     const done = vis.filter(t => getSt(t.key) === "complete").length;
     return { done, total: vis.length, pct: vis.length ? Math.round(done / vis.length * 100) : 0 };
   };
-  const totalT = engTasks.filter(t => !t.hidden && !taskInternal[t.key]).length;
-  const doneT  = engTasks.filter(t => !t.hidden && !taskInternal[t.key] && getSt(t.key) === "complete").length;
+  const totalT = engTasks.filter(t => !t.hidden && !t.internal).length;
+  const doneT  = engTasks.filter(t => !t.hidden && !t.internal && getSt(t.key) === "complete").length;
   const pct    = totalT ? Math.round(doneT / totalT * 100) : 0;
 
   const curPhase = phases.find(p => p.id === phase) ?? phases[0];
   const visTasks = engTasks
-    .filter(t => t.phase_id === phase && (isRaiz || (!t.hidden && !taskInternal[t.key])))
+    .filter(t => t.phase_id === phase && (isRaiz || (!t.hidden && !t.internal)))
     .sort((a, b) => a.sort_order - b.sort_order);
 
   // ── Shared styles ──
@@ -899,6 +896,16 @@ ${phaseSections}${notesHtml}${linksHtml}</body></html>`;
                       {projName} {isRaiz&&<span style={{color:TMUTED,fontSize:11}}>✎</span>}
                     </div>
                 }
+                {isRaiz && (
+                  <div style={{display:"flex",alignItems:"center",gap:4,marginTop:2}}>
+                    <span style={{fontSize:10,color:TMUTED}}>Start:</span>
+                    <input type="date" value={startDate||""} onChange={e=>saveStartDate(e.target.value)}
+                      style={{fontSize:10,color:startDate?TMID:TMUTED,border:"none",background:"transparent",outline:"none",cursor:"pointer",padding:0}}/>
+                  </div>
+                )}
+                {!isRaiz && startDate && (
+                  <div style={{fontSize:10,color:TMUTED,marginTop:2}}>Started {new Date(startDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</div>
+                )}
               </div>
 
               {/* Engagement switcher */}
@@ -1009,7 +1016,7 @@ ${phaseSections}${notesHtml}${linksHtml}</body></html>`;
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
               {visTasks.map(task => {
                 const st     = SMAP[getSt(task.key)];
-                const isInt  = !!taskInternal[task.key];
+                const isInt  = !!task.internal;
                 const tlog   = (logs[task.key] || []).filter(n => isRaiz || !n.internal);
                 const logVis = logsOpen[task.key];
                 const iOpen  = instrOpen === task.key;
@@ -1103,9 +1110,9 @@ ${phaseSections}${notesHtml}${linksHtml}</body></html>`;
                         )}
                         {(isRaiz||getSt(task.key)!=='complete')&&(
                           <div style={{marginTop:8,display:"flex",gap:6,alignItems:"center"}}>
-                            <input value={noteIn[task.key]||""} onChange={e=>setNoteIn(n=>({...n,[task.key]:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&addNote(task.key)} placeholder="Add a note…" style={{...iSt,flex:1}}/>
+                            <input value={noteIn[task.key]||""} onChange={e=>setNoteIn(n=>({...n,[task.key]:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&addNote(task.key,task.id)} placeholder="Add a note…" style={{...iSt,flex:1}}/>
                             {isRaiz&&<LockBtn active={!!noteIntF[task.key]} onClick={()=>toggleNoteIntF(task.key)}/>}
-                            <button onClick={()=>addNote(task.key)} style={{background:NAVY,border:"none",borderRadius:6,padding:"5px 14px",color:"#fff",cursor:"pointer",fontSize:12,fontWeight:600}}>+ Log</button>
+                            <button onClick={()=>addNote(task.key,task.id)} style={{background:NAVY,border:"none",borderRadius:6,padding:"5px 14px",color:"#fff",cursor:"pointer",fontSize:12,fontWeight:600}}>+ Log</button>
                           </div>
                         )}
                       </div>
